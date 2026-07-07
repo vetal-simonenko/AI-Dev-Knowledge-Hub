@@ -1,9 +1,8 @@
 from fastapi import FastAPI
 
-from app.llm.client import ask_llm
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.api.router import router
 
-app = FastAPI()
+app = FastAPI(title="AI Dev Knowledge Hub")
 
 
 @app.get("/")
@@ -11,9 +10,4 @@ def root():
     return {"message": "AI Dev Knowledge Hub API"}
 
 
-@app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
-
-    answer = ask_llm(request.message)
-
-    return ChatResponse(answer=answer)
+app.include_router(router)
