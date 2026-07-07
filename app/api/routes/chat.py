@@ -14,6 +14,9 @@ chat_service = ChatService()
 @router.post("", response_model=ChatResponse)
 def chat(request: ChatRequest):
 
-    answer = chat_service.chat(request.message)
+    answer = chat_service.chat(
+        session_id=request.session_id,
+        message=request.message,
+    )
 
     return ChatResponse(answer=answer)
