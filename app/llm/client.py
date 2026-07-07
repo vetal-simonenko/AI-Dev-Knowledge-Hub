@@ -1,11 +1,9 @@
-from litellm import completion
+from openai import OpenAI
+
 from app.chat.memory import memory
 from app.core.config import settings
 
-import os
-
-os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
-
+client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 SYSTEM_PROMPT = """
 You are an experienced AI Engineering mentor.
@@ -20,16 +18,10 @@ Your responsibilities:
 """
 
 
-def ask_llm(
-    session_id: str,
-    prompt: str,
-):
-    
+def ask_llm(session_id: str, prompt: str) -> str:
     conversation = memory[session_id]
 
-    response = completion(
-    model="gpt-4.1-mini",
-    messages=[
+    messages = [
         {
             "role": "system",
             "content": SYSTEM_PROMPT,
@@ -39,10 +31,17 @@ def ask_llm(
             "role": "user",
             "content": prompt,
         },
-    ],
-)
+    ]
+
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=messages,
+    )
 
     answer = response.choices[0].message.content
+
+    if answer is None:
+        raise RuntimeError("Empty response")
 
     conversation.append(
         {
