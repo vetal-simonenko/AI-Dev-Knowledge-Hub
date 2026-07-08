@@ -70,21 +70,36 @@ def ask_llm(session_id: str, prompt: str) -> LLMChatResponse:
 
         arguments = json.loads(tool_call.function.arguments)
 
-        result = add_numbers(
+        tool_result = add_numbers(
             a=arguments["a"],
             b=arguments["b"],
         )
 
-        answer = f"The result is {result}."
+        messages_with_tool_result = [
+            *messages,
+            first_message,
+            {
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": str(tool_result),
+            },
+        ]
+
+        final_response = client.responses.parse(
+            model="gpt-4.1-mini",
+            input=cast(Any, messages_with_tool_result),
+            text_format=LLMChatResponse,
+        )
+
+        parsed = final_response.output_parsed
+
+        if parsed is None:
+            raise RuntimeError("LLM returned empty structured response")
 
         conversation.append({"role": "user", "content": prompt})
-        conversation.append({"role": "assistant", "content": answer})
+        conversation.append({"role": "assistant", "content": parsed.answer})
 
-        return LLMChatResponse(
-            answer=answer,
-            topic="calculator",
-            confidence=1,
-        )
+        return parsed
 
     parsed_response = client.responses.parse(
         model="gpt-4.1-mini",
