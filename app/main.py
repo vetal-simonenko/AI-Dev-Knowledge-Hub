@@ -1,13 +1,12 @@
 from fastapi import FastAPI
 
 from app.api.router import router
+from app.core.logging import configure_logging
 
-app = FastAPI(title="AI Dev Knowledge Hub")
+configure_logging()
 
-
-@app.get("/")
-def root():
-    return {"message": "AI Dev Knowledge Hub API"}
-
+app = FastAPI(
+    title="AI Dev Knowledge Hub",
+)
 
 app.include_router(router)
