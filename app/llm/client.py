@@ -1,60 +1,103 @@
+import json
+from typing import Any, cast
+
 from openai import OpenAI
+from openai.types.chat import ChatCompletionFunctionToolParam
 
 from app.chat.memory import memory
 from app.core.config import settings
+from app.llm.schemas import LLMChatResponse
+from app.tools.calculator import add_numbers
+
+if settings.OPENAI_API_KEY is None:
+    raise RuntimeError("OPENAI_API_KEY is not set")
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 SYSTEM_PROMPT = """
 You are an experienced AI Engineering mentor.
 
-Your responsibilities:
+Return a clear, practical answer.
+Detect the topic of the user's question.
+Set confidence from 0 to 1.
 
-- explain concepts clearly
-- give concise answers
-- provide practical examples
-- write clean Python code
-- follow FastAPI best practices
+If the user asks to add numbers, use the add_numbers tool.
 """
 
+TOOLS: list[ChatCompletionFunctionToolParam] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "add_numbers",
+            "description": "Add two numbers and return the result.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "number"},
+                    "b": {"type": "number"},
+                },
+                "required": ["a", "b"],
+                "additionalProperties": False,
+            },
+        },
+    }
+]
 
-def ask_llm(session_id: str, prompt: str) -> str:
+
+def ask_llm(session_id: str, prompt: str) -> LLMChatResponse:
     conversation = memory[session_id]
 
     messages = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT,
-        },
+        {"role": "system", "content": SYSTEM_PROMPT},
         *conversation,
-        {
-            "role": "user",
-            "content": prompt,
-        },
+        {"role": "user", "content": prompt},
     ]
 
-    response = client.chat.completions.create(
+    first_response = client.chat.completions.create(
         model="gpt-4.1-mini",
-        messages=messages,
+        messages=cast(Any, messages),
+        tools=TOOLS,
+        tool_choice="auto",
     )
 
-    answer = response.choices[0].message.content
+    first_message = first_response.choices[0].message
 
-    if answer is None:
-        raise RuntimeError("Empty response")
+    if first_message.tool_calls:
+        tool_call = cast(Any, first_message.tool_calls[0])
 
-    conversation.append(
-        {
-            "role": "user",
-            "content": prompt,
-        }
+        if tool_call.function.name != "add_numbers":
+            raise RuntimeError("Unknown tool call")
+
+        arguments = json.loads(tool_call.function.arguments)
+
+        result = add_numbers(
+            a=arguments["a"],
+            b=arguments["b"],
+        )
+
+        answer = f"The result is {result}."
+
+        conversation.append({"role": "user", "content": prompt})
+        conversation.append({"role": "assistant", "content": answer})
+
+        return LLMChatResponse(
+            answer=answer,
+            topic="calculator",
+            confidence=1,
+        )
+
+    parsed_response = client.responses.parse(
+        model="gpt-4.1-mini",
+        input=cast(Any, messages),
+        text_format=LLMChatResponse,
     )
 
-    conversation.append(
-        {
-            "role": "assistant",
-            "content": answer,
-        }
-    )
+    parsed = parsed_response.output_parsed
 
-    return answer
+    if parsed is None:
+        raise RuntimeError("LLM returned empty structured response")
+
+    conversation.append({"role": "user", "content": prompt})
+    conversation.append({"role": "assistant", "content": parsed.answer})
+
+    return parsed

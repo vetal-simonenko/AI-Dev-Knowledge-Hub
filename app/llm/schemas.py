@@ -1,12 +1,7 @@
 from pydantic import BaseModel, Field
 
 
-class ChatRequest(BaseModel):
-    session_id: str
-    message: str
-
-
-class ChatResponse(BaseModel):
+class LLMChatResponse(BaseModel):
     answer: str
     topic: str
     confidence: float = Field(ge=0, le=1)
